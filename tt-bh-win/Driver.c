@@ -156,10 +156,12 @@ TtBhEvtDeviceD0Entry(
             "tt-bh-win: TelemProbe failed 0x%08X (non-fatal)\n", status));
     }
     else {
-        // Log current fan RPM and temperature for verification
-        ULONG tempMc = 0, fanRpm = 0;
-        TtBhTelemRead(ctx, TELEM_ASIC_TEMP, &tempMc);
+        // Log current fan RPM and temperature for verification.
+        // ASIC_TEMP is 16.16 fixed-point Celsius (matches tt-kmd); convert to mC.
+        ULONG tempRaw = 0, fanRpm = 0, tempMc = 0;
+        TtBhTelemRead(ctx, TELEM_ASIC_TEMP, &tempRaw);
         TtBhTelemRead(ctx, TELEM_FAN_RPM, &fanRpm);
+        tempMc = (tempRaw >> 16) * 1000 + ((tempRaw & 0xFFFF) * 1000) / 0x10000;
         KdPrintEx((DPFLTR_IHVDRIVER_ID, DPFLTR_INFO_LEVEL,
             "tt-bh-win: ASIC temp=%lu mC  Fan=%lu RPM\n", tempMc, fanRpm));
     }
