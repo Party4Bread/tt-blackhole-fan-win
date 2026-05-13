@@ -1,0 +1,49 @@
+# Visual Studio / MSBuild
+.vs/
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+ARM64/
+Win32/
+*.opensdf
+*.sdf
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.opendb
+*.VC.db
+*.VC.opendb
+*.aps
+*.ncb
+*.ipdb
+*.iobj
+*.tlog
+
+# WDK / WPP generated
+*.tmh
+Generated Files/
+
+# Driver build artifacts
+*.cab
+*.cat
+*.cer
+*.pfx
+*.pdb
+*.sys
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log

@@ -1,0 +1,88 @@
+; tt-bh-win.inf
+; Tenstorrent Blackhole Windows Fan Controller Driver
+; KMDF v1.33 (Windows 10 21H1+)
+;
+; Installation:
+;   - Test mode: devcon install tt-bh-win.inf "PCI\VEN_1E52&DEV_B140"
+;   - Production: requires EV code signing certificate
+
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = System
+ClassGuid   = {4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider    = %ManufacturerName%
+DriverVer   = 05/12/2026,1.0.0.1
+CatalogFile = tt-bh-win.cat
+PnpLockdown = 1
+
+[DestinationDirs]
+DefaultDestDir = 12  ; %SystemRoot%\System32\drivers
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+tt-bh-win.sys = 1,,
+
+; ---------------------------------------------------------------------------
+; Manufacturer and Models
+; ---------------------------------------------------------------------------
+[Manufacturer]
+%ManufacturerName% = Standard, NTamd64
+
+[Standard.NTamd64]
+; Blackhole p100a / p150a / p150b
+; Confirmed via Device Manager on p100a
+%DeviceName% = TtBhWin_Install, PCI\VEN_1E52&DEV_B140
+
+; ---------------------------------------------------------------------------
+; Install section
+; ---------------------------------------------------------------------------
+[TtBhWin_Install.NT]
+CopyFiles = TtBhWin_CopyFiles
+
+[TtBhWin_Install.NT.HW]
+AddReg = TtBhWin_HwAddReg
+
+[TtBhWin_HwAddReg]
+; Disable MSI interrupts if causing issues (optional)
+; HKR,Interrupt Management\MessageSignaledInterruptProperties,MSISupported,0x00010001,0
+
+; Allow BAR memory access
+HKR,, "EnableSelectiveSuspend", 0x00010001, 0
+
+[TtBhWin_CopyFiles]
+tt-bh-win.sys
+
+; ---------------------------------------------------------------------------
+; Service (driver registration)
+; ---------------------------------------------------------------------------
+[TtBhWin_Install.NT.Services]
+AddService = tt-bh-win, %SPSVCINST_ASSOCSERVICE%, TtBhWin_ServiceInstall
+
+[TtBhWin_ServiceInstall]
+DisplayName    = %ServiceName%
+Description    = %ServiceDescription%
+ServiceType    = 1               ; SERVICE_KERNEL_DRIVER
+StartType      = 3               ; SERVICE_DEMAND_START
+ErrorControl   = 1               ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %12%\tt-bh-win.sys
+LoadOrderGroup = Extended Base
+
+; KMDF coinstaller version (must match WDK version used to build)
+[TtBhWin_Install.NT.Wdf]
+KmdfService = tt-bh-win, TtBhWin_WdfSect
+
+[TtBhWin_WdfSect]
+KmdfLibraryVersion = 1.33
+
+; ---------------------------------------------------------------------------
+; Strings
+; ---------------------------------------------------------------------------
+[Strings]
+SPSVCINST_ASSOCSERVICE  = 0x00000002
+ManufacturerName        = "Tenstorrent Inc."
+DiskName                = "Tenstorrent Blackhole Driver Disk"
+DeviceName              = "Tenstorrent Blackhole AI Accelerator"
+ServiceName             = "tt-bh-win"
+ServiceDescription      = "Tenstorrent Blackhole Fan Controller"

@@ -1,0 +1,9 @@
+<Solution>
+  <Configurations>
+    <Platform Name="ARM64" />
+    <Platform Name="x64" />
+  </Configurations>
+  <Project Path="tt-bh-win/tt-bh-win.vcxproj">
+    <Deploy />
+  </Project>
+</Solution>
