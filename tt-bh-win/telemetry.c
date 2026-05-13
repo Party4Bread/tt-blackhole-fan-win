@@ -50,7 +50,7 @@ TtBhTelemProbe(
         KdPrintEx((DPFLTR_IHVDRIVER_ID, DPFLTR_WARNING_LEVEL,
             "tt-bh-win: Telemetry not yet available (base=0x%08X data=0x%08X)\n",
             baseAddr, dataAddr));
-        return STATUS_NOT_READY;
+        return STATUS_DEVICE_NOT_READY;
     }
 
     // Read version
