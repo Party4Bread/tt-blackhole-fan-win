@@ -38,11 +38,12 @@ TtBhArcWaitReady(
     _In_ PDEVICE_CONTEXT Ctx
 )
 {
-    LARGE_INTEGER start, now;
-    LONGLONG      elapsedMs;
+    ULONG64       start, now;
+    ULONG64       elapsedMs;
     ULONG         bootStatus;
 
-    KeQuerySystemTime(&start);
+    // Use interrupt time (monotonic since boot) — system time can jump.
+    start = KeQueryInterruptTime();
 
     for (;;) {
         bootStatus = TtBhNocRead32(Ctx, BH_ARC_X, BH_ARC_Y, BH_ARC_BOOT_STATUS);
@@ -57,10 +58,10 @@ TtBhArcWaitReady(
             return STATUS_SUCCESS;
         }
 
-        KeQuerySystemTime(&now);
-        elapsedMs = (now.QuadPart - start.QuadPart) / 10000LL; // 100ns -> ms
+        now = KeQueryInterruptTime();
+        elapsedMs = (now - start) / 10000ULL; // 100ns -> ms
 
-        if (elapsedMs >= (LONGLONG)BH_ARC_MSG_READY_MS) {
+        if (elapsedMs >= (ULONG64)BH_ARC_MSG_READY_MS) {
             KdPrintEx((DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL,
                 "tt-bh-win: ARC not ready after %llums (boot_status=0x%08X)\n",
                 elapsedMs, bootStatus));
@@ -95,16 +96,16 @@ TtBhArcMsgQueuePush(
 {
     ULONG         requestBase = QueueBase + BH_ARC_MSG_QUEUE_HDR_SIZE;
     ULONG         wptr, rptr, numOccupied, slot, reqOffset;
-    LARGE_INTEGER start, now;
-    LONGLONG      elapsedMs;
+    ULONG64       start, now;
+    ULONG64       elapsedMs;
     NTSTATUS      status;
 
     // Read write pointer
     status = TtBhCsmRead32(Ctx, BH_QCB_REQ_WPTR(QueueBase), &wptr);
     if (!NT_SUCCESS(status)) return status;
 
-    // Wait for queue space
-    KeQuerySystemTime(&start);
+    // Wait for queue space (monotonic time — system time can jump backward).
+    start = KeQueryInterruptTime();
     for (;;) {
         status = TtBhCsmRead32(Ctx, BH_QCB_REQ_RPTR(QueueBase), &rptr);
         if (!NT_SUCCESS(status)) return status;
@@ -112,9 +113,9 @@ TtBhArcMsgQueuePush(
         numOccupied = (wptr - rptr) % (2 * NumEntries);
         if (numOccupied < NumEntries) break;
 
-        KeQuerySystemTime(&now);
-        elapsedMs = (now.QuadPart - start.QuadPart) / 10000LL;
-        if (elapsedMs >= (LONGLONG)BH_ARC_MSG_TIMEOUT_MS) {
+        now = KeQueryInterruptTime();
+        elapsedMs = (now - start) / 10000ULL;
+        if (elapsedMs >= (ULONG64)BH_ARC_MSG_TIMEOUT_MS) {
             KdPrintEx((DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL,
                 "tt-bh-win: ARC message queue full (timeout)\n"));
             return STATUS_IO_TIMEOUT;
@@ -158,15 +159,15 @@ TtBhArcMsgQueuePop(
     ULONG         responseBase = QueueBase + BH_ARC_MSG_QUEUE_HDR_SIZE
                                + NumEntries * BH_ARC_MSG_SIZE;
     ULONG         rptr, wptr, numOccupied, slot, respOffset;
-    LARGE_INTEGER start, now;
-    LONGLONG      elapsedMs;
+    ULONG64       start, now;
+    ULONG64       elapsedMs;
     NTSTATUS      status;
 
     status = TtBhCsmRead32(Ctx, BH_QCB_RES_RPTR(QueueBase), &rptr);
     if (!NT_SUCCESS(status)) return status;
 
-    // Wait for response
-    KeQuerySystemTime(&start);
+    // Wait for response (monotonic time — system time can jump backward).
+    start = KeQueryInterruptTime();
     for (;;) {
         status = TtBhCsmRead32(Ctx, BH_QCB_RES_WPTR(QueueBase), &wptr);
         if (!NT_SUCCESS(status)) return status;
@@ -174,9 +175,9 @@ TtBhArcMsgQueuePop(
         numOccupied = (wptr - rptr) % (2 * NumEntries);
         if (numOccupied > 0) break;
 
-        KeQuerySystemTime(&now);
-        elapsedMs = (now.QuadPart - start.QuadPart) / 10000LL;
-        if (elapsedMs >= (LONGLONG)BH_ARC_MSG_TIMEOUT_MS) {
+        now = KeQueryInterruptTime();
+        elapsedMs = (now - start) / 10000ULL;
+        if (elapsedMs >= (ULONG64)BH_ARC_MSG_TIMEOUT_MS) {
             KdPrintEx((DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL,
                 "tt-bh-win: ARC response timeout\n"));
             return STATUS_IO_TIMEOUT;
@@ -229,6 +230,15 @@ TtBhArcSendMsg(
     if (!NT_SUCCESS(status)) return status;
 
     numEntries = queueInfo & 0xFF;
+
+    // Guard against divide-by-zero in the ring math below — a malformed/
+    // uninitialized QCB info word would otherwise BSOD on `% (2 * NumEntries)`.
+    if (numEntries == 0) {
+        KdPrintEx((DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL,
+            "tt-bh-win: invalid ARC queue (numEntries=0, queueInfo=0x%08X)\n",
+            queueInfo));
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+    }
 
     // 4. Push message into request ring
     status = TtBhArcMsgQueuePush(Ctx, queueBase, numEntries,
